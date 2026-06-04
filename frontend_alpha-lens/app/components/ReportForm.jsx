@@ -223,7 +223,7 @@ export default function ReportForm() {
                 Generate Research Report
               </h2>
               <p className="font-dmono text-[11px] text-slate-500 mb-7 tracking-wide">
-                PDF · CSV · TXT accepted
+                PDF · TXT accepted
               </p>
 
               <form onSubmit={handleSubmit} className="space-y-5">
@@ -285,7 +285,7 @@ export default function ReportForm() {
                         Drop file or <span className="text-blue-400">browse</span>
                       </p>
                       <p className="font-mono text-[10px] text-slate-600 mt-1.5 tracking-widest">
-                        PDF · CSV · TXT · XLSX
+                        PDF · TXT
                       </p>
                     </div>
                   )}
@@ -293,7 +293,7 @@ export default function ReportForm() {
                   <input
                     ref={inputRef}
                     type="file"
-                    accept=".pdf,.csv,.txt,.xlsx,.xls"
+                    accept=".pdf,.txt"
                     className="hidden"
                     onChange={e => handleFileChange(e.target.files?.[0])}
                   />

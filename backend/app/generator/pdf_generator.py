@@ -195,15 +195,9 @@ def _two_charts(c1, c2, story):
 def _has_real_financials(financials):
     if not financials:
         return False
-
     for row in financials:
-        if (
-            row.get("sales") is not None
-            or row.get("ebitda") is not None
-            or row.get("pat") is not None
-        ):
+        if row.get("sales") or row.get("pat"):  # at least one must be truthy
             return True
-
     return False
 
 def _build_page1(data: dict, story: list):
@@ -311,7 +305,7 @@ def _build_page1(data: dict, story: list):
         co_rows = [[Paragraph("Data not available in source document", S_TABLE_LABEL),
                     Paragraph("", S_TABLE_CELL)]]
 
-    co_table = Table(co_rows, colWidths=[CONTENT_W * 0.22, CONTENT_W * 0.13])
+    co_table = Table(co_rows, colWidths=[CONTENT_W * 0.25, CONTENT_W * 0.12])
     co_table.setStyle(TableStyle([
         ("ROWBACKGROUNDS", (0, 0), (-1, -1), [WHITE, LIGHT_BLUE]),
         ("FONTSIZE",       (0, 0), (-1, -1), 7),
@@ -332,7 +326,7 @@ def _build_page1(data: dict, story: list):
             ["Promoters"] + [val(s.get("promoters")) for s in sh[-3:]],
             ["FII's"]     + [val(s.get("fii"))       for s in sh[-3:]],
             ["MFs/Inst."] + [val(s.get("mf"))        for s in sh[-3:]],
-            ["Public"]    + [val(s.get("public"))     for s in sh[-3:]],
+            ["Public"]    + [val(s.get("preublic"))     for s in sh[-3:]],
             ["Others"]    + [val(s.get("others"))     for s in sh[-3:]],
             ["Total"]     + [val(s.get("total"), na="100.0") for s in sh[-3:]],
         ]
@@ -441,21 +435,35 @@ def _build_page1(data: dict, story: list):
         q_table.setStyle(TableStyle(_base_table_style()))
         right_col.append(_section_label("Quarterly Financials"))
         right_col.append(q_table)
-
-    left_inner  = Table([[c] for c in left_col],  colWidths=[CONTENT_W * 0.37])
-    right_inner = Table([[c] for c in right_col], colWidths=[CONTENT_W * 0.62])
-    left_inner.setStyle(TableStyle([("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),1)]))
-    right_inner.setStyle(TableStyle([("TOPPADDING",(0,0),(-1,-1),0),("BOTTOMPADDING",(0,0),(-1,-1),1)]))
-
-    two_col = Table([[left_inner, right_inner]], colWidths=[CONTENT_W * 0.37, CONTENT_W * 0.63])
-    two_col.setStyle(TableStyle([
-        ("VALIGN",        (0, 0), (-1, -1), "TOP"),
-        ("TOPPADDING",    (0, 0), (-1, -1), 0),
-        ("LEFTPADDING",   (0, 0), (-1, -1), 0),
-        ("RIGHTPADDING",  (0, 0), (-1, -1), 2),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-    ]))
-    story.append(two_col)
+    # At the very end of _build_page1, replace the two_col block:
+    try:
+        max_rows = max(len(left_col), len(right_col))
+    
+        # Pad the shorter list with empty Spacers
+        while len(left_col) < max_rows:
+            left_col.append(Spacer(1, 1))
+        while len(right_col) < max_rows:
+            right_col.append(Spacer(1, 1))
+        
+        for l_item, r_item in zip(left_col, right_col):
+            row_table = Table(
+                [[l_item, r_item]],
+                colWidths=[CONTENT_W * 0.37, CONTENT_W * 0.63]
+            )
+            row_table.setStyle(TableStyle([
+                ("VALIGN",        (0, 0), (-1, -1), "TOP"),
+                ("TOPPADDING",    (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+                ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING",  (0, 0), (-1, -1), 2),
+            ]))
+            story.append(row_table)
+    except Exception as e:
+        # Fallback: render columns sequentially if two-col layout fails
+        for c in left_col:
+            story.append(c)
+        for c in right_col:
+            story.append(c)
 
 
 def _build_page2(data: dict, story: list):
@@ -467,7 +475,11 @@ def _build_page2(data: dict, story: list):
     fin     = data.get("financials") or []
     qf      = data.get("quarterly_financials") or []
 
-    if _has_real_financials(fin):
+    # Check if annual financials have meaningful sales data
+    has_annual = _has_real_financials(fin)
+    has_sales  = any(r.get("sales") for r in fin) if fin else False
+
+    if has_annual and has_sales:
         rev_label    = "Net Interest Income (Rs. Cr)" if banking else "Revenue (Rs. Cr)"
         margin_label = "NIM (%)" if banking else "EBITDA Margin (%)"
         _two_charts(_revenue_chart(fin, rev_label), _margin_chart(fin, margin_label), story)
@@ -475,6 +487,24 @@ def _build_page2(data: dict, story: list):
         story.append(_section_label("PAT Trend"))
         story.append(Spacer(1, 3 * mm))
         story.append(_pat_chart(fin))
+
+    elif has_annual and not has_sales:
+        # Has PAT/EBITDA but no revenue — show only PAT trend
+        story.append(_section_label("PAT Trend"))
+        story.append(Spacer(1, 3 * mm))
+        story.append(_pat_chart(fin))
+        story.append(Spacer(1, 4 * mm))
+        # Fall through to quarterly charts too
+        if qf:
+            q         = qf[0]
+            rev_label = "NII — Quarterly (Rs. Cr)" if banking else "Revenue — Quarterly (Rs. Cr)"
+            story.append(_section_label("Quarterly Charts"))
+            story.append(Spacer(1, 3 * mm))
+            _two_charts(
+                _quarterly_bar_chart(q, "sales",  rev_label),
+                _quarterly_bar_chart(q, "ebitda", "EBITDA — Quarterly (Rs. Cr)"),
+                story
+            )
 
     elif qf:
         q         = qf[0]
@@ -491,6 +521,7 @@ def _build_page2(data: dict, story: list):
     else:
         story.append(Paragraph("No financial data available for charts.", S_BODY))
 
+    # Additional highlights overflow
     highlights = data.get("highlights") or []
     if len(highlights) > 6:
         story.append(Spacer(1, 4 * mm))
@@ -499,7 +530,6 @@ def _build_page2(data: dict, story: list):
         for h in highlights[6:]:
             story.append(Paragraph(f"• {h}", S_BULLET))
             story.append(Spacer(1, 1 * mm))
-
 
 def _build_page3(data: dict, story: list):
     story.append(PageBreak())

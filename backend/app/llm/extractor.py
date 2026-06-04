@@ -2,8 +2,7 @@ import os
 import json
 from google import genai
 
-client = genai.Client(api_key="API_KEY")
-
+client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
 def _clean_json(text: str) -> str:
     text = text.strip()
