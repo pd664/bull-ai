@@ -59,7 +59,6 @@ http://localhost:8000
 # Frontend
 - npm run dev
   
-Sample generated reports are included:
-
-ICICI Bank Report
-L&T Technology Services Report
+## Sample generated reports are included:
+- ICICI Bank 
+- JSW Energy
